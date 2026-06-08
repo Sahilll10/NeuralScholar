@@ -12,32 +12,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("neuralscholar.api")
 
-# Global component references (initialized in lifespan)
 retrieval_pipeline = None
 generator = None
 cache = None
 benchmarker = None
 ingestion_pipeline = None
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan context manager.
-    All ML models and connections are initialized once at startup
-    and shared across requests. This avoids the massive overhead
-    of loading sentence-transformers and cross-encoder on every request.
-    """
     global retrieval_pipeline, generator, cache, benchmarker, ingestion_pipeline
 
     logger.info("=== NeuralScholar API starting up ===")
 
-    # 1. Initialize embedding manager (loads sentence-transformers model)
     from embeddings.embedding_manager import EmbeddingManager
     embedder = EmbeddingManager(primary="local", fallback=True)
     logger.info(f"Embedder ready. Dimension: {embedder.dimension}")
 
-    # 2. Initialize vector stores
     from vector_store.pinecone_store import PineconeVectorStore
     from vector_store.faiss_store import FAISSVectorStore
     from vector_store.bm25_store import BM25Store
@@ -57,7 +47,6 @@ async def lifespan(app: FastAPI):
 
     bm25_store = BM25Store(index_path=settings.BM25_INDEX_PATH)
 
-    # 3. Initialize retrieval pipeline (loads cross-encoder model)
     from retrieval.retrieval_pipeline import RetrievalPipeline
     retrieval_pipeline = RetrievalPipeline(
         embedder=embedder,
@@ -68,7 +57,6 @@ async def lifespan(app: FastAPI):
         use_reranker=True
     )
 
-    # 4. Initialize generator
     from generation.generator import RAGGenerator
     generator = RAGGenerator(
         api_key=settings.OPENAI_API_KEY,
@@ -78,7 +66,6 @@ async def lifespan(app: FastAPI):
         max_context_tokens=settings.MAX_CONTEXT_TOKENS
     )
 
-    # 5. Initialize Redis cache
     from cache.redis_client import RedisCache
     cache = RedisCache(
         host=settings.REDIS_HOST,
@@ -88,11 +75,9 @@ async def lifespan(app: FastAPI):
         ttl=settings.CACHE_TTL
     )
 
-    # 6. Initialize benchmarker
     from evaluation.benchmarker import LatencyBenchmarker
     benchmarker = LatencyBenchmarker()
 
-    # 7. Initialize ingestion pipeline
     from data.pipeline import IngestionPipeline
     ingestion_pipeline = IngestionPipeline(
         embedder=embedder,
@@ -105,7 +90,6 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("=== NeuralScholar API shutting down ===")
-
 
 app = FastAPI(
     title="NeuralScholar API",
@@ -124,16 +108,6 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Import and register routers
-from api.routes.query import router as query_router
-from api.routes.ingest import router as ingest_router
-from api.routes.eval import router as eval_router
-
-app.include_router(query_router, prefix="/api/v1", tags=["Query"])
-app.include_router(ingest_router, prefix="/api/v1", tags=["Ingestion"])
-app.include_router(eval_router, prefix="/api/v1", tags=["Evaluation"])
-
-
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {
@@ -142,11 +116,17 @@ async def health_check():
         "cache_available": cache.available if cache else False
     }
 
-
 @app.get("/benchmark", tags=["Health"])
 async def get_benchmark():
     return benchmarker.report() if benchmarker else {}
 
+from api.routes.query import router as query_router
+from api.routes.ingest import router as ingest_router
+from api.routes.eval import router as eval_router
+
+app.include_router(query_router, prefix="/api/v1", tags=["Query"])
+app.include_router(ingest_router, prefix="/api/v1", tags=["Ingestion"])
+app.include_router(eval_router, prefix="/api/v1", tags=["Evaluation"])
 
 if __name__ == "__main__":
     uvicorn.run(
