@@ -1,80 +1,111 @@
-import hashlib
-from typing import Dict, Any, Optional
-from datetime import datetime
+__author__ = "Sahil Kumar - 3252"
 
+import logging
+from typing import List, Dict, Any, Optional
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from data.processing.metadata_extractor import MetadataExtractor
 
-class MetadataExtractor:
+# Note: These loaders need to exist in your data/ingestion folder
+try:
+    from data.ingestion.arxiv_loader import ArxivLoader
+    from data.ingestion.pdf_loader import PDFLoader
+except ImportError:
+    # Fallbacks if the specific loader files aren't created yet
+    class ArxivLoader:
+        def fetch_by_ids(self, ids): return []
+        def fetch(self, query, max_results): return []
+    class PDFLoader:
+        def load_from_url(self, url): return {}
+
+logger = logging.getLogger(__name__)
+
+class IngestionPipeline:
     """
-    Normalizes metadata from different sources (ArXiv papers, PDFs, custom docs)
-    into a consistent schema used throughout the vector stores and retrieval layer.
-    
-    Pinecone metadata constraints:
-    - Values must be str, int, float, bool, or List[str]
-    - Each metadata entry has a 40KB limit
-    - Keys must be strings without leading underscores
+    Orchestrates the downloading, parsing, chunking, embedding, 
+    and database upsertion of ML research papers.
     """
+    def __init__(self, embedder, pinecone_store, faiss_store, bm25_store):
+        self.embedder = embedder
+        self.pinecone_store = pinecone_store
+        self.faiss_store = faiss_store
+        self.bm25_store = bm25_store
+        self.arxiv_loader = ArxivLoader()
+        self.pdf_loader = PDFLoader()
+        
+        # Configure chunking for dense scientific text
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=150,
+            separators=["\n\n", "\n", ".", " ", ""]
+        )
 
-    @staticmethod
-    def from_arxiv_paper(paper) -> Dict[str, Any]:
+    def _process_and_index(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Create unified metadata dict from ArXivPaper dataclass.
-        The doc_id follows the pattern 'arxiv_{arxiv_id}'.
+        Takes raw text documents, splits them, embeds them, and pushes to vector databases.
         """
+        chunks = []
+        logger.info(f"Processing {len(documents)} documents for ingestion...")
+        
+        for doc in documents:
+            doc_id = doc["doc_id"]
+            text = doc["text"]
+            metadata = MetadataExtractor.sanitize_for_pinecone(doc.get("metadata", {}))
+
+            split_texts = self.text_splitter.split_text(text)
+            for i, chunk_text in enumerate(split_texts):
+                chunk_id = f"{doc_id}_chunk_{i}"
+                chunk_metadata = metadata.copy()
+                chunk_metadata["chunk_index"] = i
+                chunk_metadata["text"] = chunk_text  # Store text for retrieval
+                
+                chunks.append({
+                    "id": chunk_id,
+                    "text": chunk_text,
+                    "metadata": chunk_metadata
+                })
+
+        if not chunks:
+            logger.warning("No chunks created from documents.")
+            return {"documents_processed": 0, "chunks_created": 0, "vectors_upserted": 0}
+
+        # Embed chunks using the selected model
+        texts = [c["text"] for c in chunks]
+        logger.info(f"Embedding {len(texts)} chunks...")
+        embeddings = self.embedder.embed_documents(texts)
+
+        # Prepare vectors for Pinecone
+        pinecone_vectors = []
+        for chunk, emb in zip(chunks, embeddings):
+            pinecone_vectors.append({
+                "id": chunk["id"],
+                "values": emb,
+                "metadata": chunk["metadata"]
+            })
+
+        # Upsert to all three vector stores
+        logger.info("Upserting vectors to Pinecone, FAISS, and BM25...")
+        self.pinecone_store.upsert(pinecone_vectors)
+        self.faiss_store.add(texts, embeddings, [c["metadata"] for c in chunks])
+        self.bm25_store.add_documents(texts, [c["metadata"] for c in chunks])
+
+        logger.info("Ingestion complete.")
         return {
-            "doc_id": f"arxiv_{paper.arxiv_id}",
-            "source_type": "arxiv",
-            "arxiv_id": paper.arxiv_id,
-            "title": paper.title[:500],
-            "authors": ", ".join(paper.authors[:5]),
-            "abstract": paper.abstract[:1000],
-            "categories": ", ".join(paper.categories),
-            "published_date": paper.published_date,
-            "updated_date": paper.updated_date,
-            "paper_url": paper.paper_url,
-            "pdf_url": paper.pdf_url,
-            "ingested_at": datetime.utcnow().isoformat()
+            "documents_processed": len(documents),
+            "chunks_created": len(chunks),
+            "vectors_upserted": len(chunks)
         }
 
-    @staticmethod
-    def from_pdf(pdf_data: Dict[str, Any], custom_id: Optional[str] = None) -> Dict[str, Any]:
+    def ingest_arxiv(self, query: str, max_results: int = 5, categories: Optional[List[str]] = None, use_full_text: bool = False) -> Dict[str, Any]:
         """
-        Create metadata dict from parsed PDF data dict.
-        doc_id follows the pattern 'pdf_{hash}'.
+        Fetch papers from ArXiv via query and push them through the pipeline.
         """
-        file_name = pdf_data.get("file_name", "unknown.pdf")
-        doc_hash = custom_id or hashlib.md5(file_name.encode()).hexdigest()[:12]
-
-        return {
-            "doc_id": f"pdf_{doc_hash}",
-            "source_type": "pdf",
-            "title": pdf_data.get("title", "Unknown Document")[:500],
-            "author": pdf_data.get("author", "Unknown")[:200],
-            "source": pdf_data.get("source", ""),
-            "file_name": file_name,
-            "num_pages": pdf_data.get("num_pages", 0),
-            "creation_date": pdf_data.get("creation_date", ""),
-            "ingested_at": datetime.utcnow().isoformat()
-        }
-
-    @staticmethod
-    def sanitize_for_pinecone(metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Ensure all metadata values conform to Pinecone's type requirements.
-        Converts any non-conforming values to strings.
-        None values become empty strings.
-        """
-        sanitized = {}
-        for key, value in metadata.items():
-            if isinstance(value, bool):
-                sanitized[key] = value
-            elif isinstance(value, (int, float)):
-                sanitized[key] = value
-            elif isinstance(value, str):
-                sanitized[key] = value[:1000]  # Pinecone string limit safety
-            elif isinstance(value, list):
-                sanitized[key] = [str(v)[:200] for v in value[:20]]
-            elif value is None:
-                sanitized[key] = ""
-            else:
-                sanitized[key] = str(value)[:500]
-        return sanitized
+        logger.info(f"Fetching ArXiv papers for query: {query}")
+        papers = self.arxiv_loader.fetch(query, max_results=max_results)
+        docs = []
+        
+        for p in papers:
+            meta = MetadataExtractor.from_arxiv_paper(p)
+            text = f"Title: {p.title}\n\nAbstract: {p.abstract}"
+            docs.append({"doc_id": meta["doc_id"], "text": text, "metadata": meta})
+            
+        return self._process_and_index(docs)
