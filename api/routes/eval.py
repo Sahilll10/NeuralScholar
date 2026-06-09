@@ -2,12 +2,10 @@ import logging
 from fastapi import APIRouter, HTTPException
 from api.models.request import EvalRequest
 from api.models.response import EvalResponse
-import api.main as app_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Default evaluation questions for the ML/NLP domain
 DEFAULT_EVAL_QUESTIONS = [
     "What is the attention mechanism in transformers and how does it work?",
     "How does retrieval-augmented generation improve factual accuracy?",
@@ -21,12 +19,9 @@ DEFAULT_EVAL_QUESTIONS = [
     "How does chain-of-thought prompting improve reasoning capabilities?"
 ]
 
-
 @router.post("/evaluate", response_model=EvalResponse)
 async def evaluate(request: EvalRequest):
-    """
-    Run full evaluation: RAGAS + retrieval metrics + latency benchmarks.
-    """
+    import api.main as app_state
     pipeline = app_state.retrieval_pipeline
     gen = app_state.generator
     bench = app_state.benchmarker
@@ -48,7 +43,6 @@ async def evaluate(request: EvalRequest):
             all_answers.append(result["answer"])
             all_contexts.append([d["metadata"].get("text", "")[:500] for d in docs])
 
-        # RAGAS evaluation
         from evaluation.ragas_evaluator import RAGASEvaluator
         ragas_eval = RAGASEvaluator(openai_api_key=app_state.settings.OPENAI_API_KEY if hasattr(app_state, 'settings') else "")
         
@@ -63,7 +57,6 @@ async def evaluate(request: EvalRequest):
             ground_truths=ground_truths
         )
 
-        # Retrieval metrics (using RAGAS context precision as proxy for relevance)
         from evaluation.metrics import RetrievalMetrics
         retrieval_metrics = {"precision@5": ragas_scores.get("context_precision", 0)}
 
@@ -78,10 +71,9 @@ async def evaluate(request: EvalRequest):
         logger.error(f"Eval error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/benchmark")
 async def get_latency_benchmark():
-    """Return accumulated latency benchmarks from the running API."""
+    import api.main as app_state
     bench = app_state.benchmarker
     if bench is None:
         return {"message": "No benchmarks recorded yet"}

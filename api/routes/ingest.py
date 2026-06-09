@@ -2,18 +2,13 @@ import logging
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from api.models.request import IngestRequest
 from api.models.response import IngestResponse
-import api.main as app_state
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest(request: IngestRequest, background_tasks: BackgroundTasks):
-    """
-    Trigger document ingestion from ArXiv or PDF URL.
-    Long ingestion jobs run in background (BackgroundTasks).
-    """
+    import api.main as app_state
     pipeline = app_state.ingestion_pipeline
     if pipeline is None:
         raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
@@ -54,7 +49,6 @@ async def ingest(request: IngestRequest, background_tasks: BackgroundTasks):
         else:
             raise HTTPException(status_code=422, detail=f"Unknown source: {request.source}")
 
-        # Invalidate cache after ingestion
         if app_state.cache:
             app_state.cache.invalidate()
 
