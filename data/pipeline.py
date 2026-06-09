@@ -3,19 +3,10 @@ __author__ = "Sahil Kumar - 3252"
 import logging
 from typing import List, Dict, Any, Optional
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from data.processing.metadata_extractor import MetadataExtractor
 
-# Note: These loaders need to exist in your data/ingestion folder
-try:
-    from data.ingestion.arxiv_loader import ArxivLoader
-    from data.ingestion.pdf_loader import PDFLoader
-except ImportError:
-    # Fallbacks if the specific loader files aren't created yet
-    class ArxivLoader:
-        def fetch_by_ids(self, ids): return []
-        def fetch(self, query, max_results): return []
-    class PDFLoader:
-        def load_from_url(self, url): return {}
+from data.ingestion.arxiv_loader import ArXivLoader
+from data.ingestion.pdf_loader import PDFLoader
+from data.processing.metadata_extractor import MetadataExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +20,10 @@ class IngestionPipeline:
         self.pinecone_store = pinecone_store
         self.faiss_store = faiss_store
         self.bm25_store = bm25_store
-        self.arxiv_loader = ArxivLoader()
+        
+        self.arxiv_loader = ArXivLoader()
         self.pdf_loader = PDFLoader()
         
-        # Configure chunking for dense scientific text
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=150,
@@ -40,9 +31,6 @@ class IngestionPipeline:
         )
 
     def _process_and_index(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Takes raw text documents, splits them, embeds them, and pushes to vector databases.
-        """
         chunks = []
         logger.info(f"Processing {len(documents)} documents for ingestion...")
         
@@ -56,7 +44,7 @@ class IngestionPipeline:
                 chunk_id = f"{doc_id}_chunk_{i}"
                 chunk_metadata = metadata.copy()
                 chunk_metadata["chunk_index"] = i
-                chunk_metadata["text"] = chunk_text  # Store text for retrieval
+                chunk_metadata["text"] = chunk_text  
                 
                 chunks.append({
                     "id": chunk_id,
@@ -68,23 +56,32 @@ class IngestionPipeline:
             logger.warning("No chunks created from documents.")
             return {"documents_processed": 0, "chunks_created": 0, "vectors_upserted": 0}
 
-        # Embed chunks using the selected model
         texts = [c["text"] for c in chunks]
         logger.info(f"Embedding {len(texts)} chunks...")
         embeddings = self.embedder.embed_documents(texts)
 
-        # Prepare vectors for Pinecone
         pinecone_vectors = []
         for chunk, emb in zip(chunks, embeddings):
+            # Bulletproof the embedding array to prevent Pinecone/NumPy crashes
+            clean_emb = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
+            clean_emb = [float(x) for x in clean_emb]
+            
             pinecone_vectors.append({
                 "id": chunk["id"],
-                "values": emb,
+                "values": clean_emb,
                 "metadata": chunk["metadata"]
             })
 
-        # Upsert to all three vector stores
         logger.info("Upserting vectors to Pinecone, FAISS, and BM25...")
-        self.pinecone_store.upsert(pinecone_vectors)
+        
+        # The Magic Fix: Bypass the broken wrapper and talk to the index directly in safe batches
+        if hasattr(self.pinecone_store, 'index'):
+            batch_size = 100
+            for i in range(0, len(pinecone_vectors), batch_size):
+                self.pinecone_store.index.upsert(vectors=pinecone_vectors[i:i+batch_size])
+        else:
+            self.pinecone_store.upsert(pinecone_vectors)
+
         self.faiss_store.add(texts, embeddings, [c["metadata"] for c in chunks])
         self.bm25_store.add_documents(texts, [c["metadata"] for c in chunks])
 
@@ -95,14 +92,18 @@ class IngestionPipeline:
             "vectors_upserted": len(chunks)
         }
 
-    def ingest_arxiv(self, query: str, max_results: int = 5, categories: Optional[List[str]] = None, use_full_text: bool = False) -> Dict[str, Any]:
-        """
-        Fetch papers from ArXiv via query and push them through the pipeline.
-        """
-        logger.info(f"Fetching ArXiv papers for query: {query}")
-        papers = self.arxiv_loader.fetch(query, max_results=max_results)
+    def ingest_arxiv(self, query: Optional[str] = None, arxiv_ids: Optional[List[str]] = None, max_results: int = 5) -> Dict[str, Any]:
+        if arxiv_ids:
+            logger.info(f"Fetching {len(arxiv_ids)} specific ArXiv papers by ID...")
+            papers = self.arxiv_loader.fetch_by_ids(arxiv_ids)
+        elif query:
+            logger.info(f"Fetching ArXiv papers for query: {query}")
+            papers = self.arxiv_loader.fetch_papers(query, max_results=max_results)
+        else:
+            logger.warning("No query or arxiv_ids provided.")
+            return {"documents_processed": 0, "chunks_created": 0, "vectors_upserted": 0}
+
         docs = []
-        
         for p in papers:
             meta = MetadataExtractor.from_arxiv_paper(p)
             text = f"Title: {p.title}\n\nAbstract: {p.abstract}"

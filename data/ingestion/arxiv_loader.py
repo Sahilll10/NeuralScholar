@@ -1,3 +1,5 @@
+__author__ = "Sahil Kumar - 3252"
+
 import arxiv
 import time
 import logging
@@ -5,7 +7,6 @@ from typing import List, Optional
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class ArXivPaper:
@@ -60,15 +61,6 @@ class ArXivLoader:
     ) -> List[ArXivPaper]:
         """
         Fetch papers from ArXiv matching the query.
-
-        Args:
-            query: Natural language search string
-            max_results: Maximum number of papers to return
-            sort_by: arxiv.SortCriterion.SubmittedDate | Relevance | LastUpdatedDate
-            categories: Optional ArXiv category filters e.g. ["cs.CL", "cs.AI", "cs.LG"]
-
-        Returns:
-            List of ArXivPaper dataclass instances
         """
         if categories:
             cat_filter = " OR ".join([f"cat:{c}" for c in categories])
@@ -144,3 +136,6 @@ class ArXivLoader:
 
         logger.info(f"Default corpus: {len(all_papers)} unique papers")
         return list(all_papers.values())
+
+    # Alias to ensure compatibility with pipeline
+    fetch = fetch_papers
