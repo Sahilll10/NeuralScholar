@@ -1,6 +1,9 @@
 # 🧠 NeuralScholar
 **Machine Learning Research Literature Intelligence**
 
+[![Live Application](https://img.shields.io/badge/Live_App-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://neuralscholar-vapssaw6clm9s7jkzpwgjh.streamlit.app/)
+[![API Docs](https://img.shields.io/badge/API_Docs-FastAPI_Swagger-009688?style=for-the-badge&logo=fastapi)](https://neuralscholar-api.onrender.com/docs)
+
 NeuralScholar is an advanced, end-to-end Retrieval-Augmented Generation (RAG) engine designed specifically for navigating dense Machine Learning research literature. It bridges the gap between semantic understanding and exact keyword matching by leveraging a sophisticated hybrid-retrieval pipeline, local embeddings, cross-encoder reranking, and large language model generation.
 
 ## 🚀 Key Features
@@ -18,7 +21,7 @@ NeuralScholar is an advanced, end-to-end Retrieval-Augmented Generation (RAG) en
 ### 1. Data Ingestion Pipeline
 1. **Extraction:** Papers are fetched via the ArXiv API matching specific IDs or ML queries.
 2. **Chunking:** Documents are parsed and split using LangChain's `RecursiveCharacterTextSplitter` (Size: 1000, Overlap: 150) to preserve paragraph contexts.
-3. **Embedding:** Chunks are embedded locally using `all-mpnet-base-v2` (768 dimensions).
+3. **Embedding:** Chunks are embedded locally using `all-MiniLM-L6-v2` (384 dimensions) for cloud-optimized memory usage.
 4. **Indexing:** Vectors are concurrently upserted to a cloud **Pinecone** index, a local **FAISS** index, and a **BM25** sparse index.
 
 ### 2. Query & Retrieval Pipeline
@@ -35,31 +38,31 @@ NeuralScholar is an advanced, end-to-end Retrieval-Augmented Generation (RAG) en
 
 ## 🛠️ Technology Stack
 
-| Component | Technology |
-| :--- | :--- |
-| **Frontend UI** | Streamlit |
-| **Backend API** | FastAPI, Uvicorn |
-| **Vector Databases** | Pinecone (Cloud), FAISS (Local) |
-| **Sparse Retrieval** | rank_bm25 (Okapi) |
-| **Embedding Model** | SentenceTransformers (`all-mpnet-base-v2`) |
-| **Reranker** | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) |
-| **LLM / Generation** | OpenAI API (GPT-4o) |
+| Component | Technology | Cloud Host |
+| :--- | :--- | :--- |
+| **Frontend UI** | Streamlit | Streamlit Community Cloud |
+| **Backend API** | FastAPI, Uvicorn | Render |
+| **Vector Databases** | Pinecone (Cloud), FAISS (Local) | Pinecone |
+| **Sparse Retrieval** | rank_bm25 (Okapi) | Render |
+| **Embedding Model** | SentenceTransformers (`all-MiniLM-L6-v2`) | Render |
+| **Reranker** | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`) | Render |
+| **LLM / Generation** | OpenAI API (GPT-4o) | OpenAI |
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Installation & Setup (Local Development)
 
 ### 1. Prerequisites
-* Python 3.10+
+* Python 3.11+
 * An active OpenAI API Key
-* An active Pinecone API Key & Index (Dimension: 768, Metric: cosine)
+* An active Pinecone API Key & Index (Dimension: 384, Metric: cosine)
 
 ### 2. Environment Setup
 Clone the repository and spin up a virtual environment:
 
-```powershell
-git clone [https://github.com/yourusername/NeuralScholar.git](https://github.com/yourusername/NeuralScholar.git)
+```bash
+git clone [https://github.com/Sahilll10/NeuralScholar.git](https://github.com/Sahilll10/NeuralScholar.git)
 cd NeuralScholar
 python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+pip install -r requirements-backend.txt
