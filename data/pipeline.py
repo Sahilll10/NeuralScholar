@@ -11,10 +11,6 @@ from data.processing.metadata_extractor import MetadataExtractor
 logger = logging.getLogger(__name__)
 
 class IngestionPipeline:
-    """
-    Orchestrates the downloading, parsing, chunking, embedding, 
-    and database upsertion of ML research papers.
-    """
     def __init__(self, embedder, pinecone_store, faiss_store, bm25_store):
         self.embedder = embedder
         self.pinecone_store = pinecone_store
@@ -67,18 +63,17 @@ class IngestionPipeline:
             clean_emb = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
             clean_emb = [float(x) for x in clean_emb]
             
-            # Formatted for Pinecone
             pinecone_vectors.append({
                 "id": chunk["id"],
                 "values": clean_emb,
                 "metadata": chunk["metadata"]
             })
             
-            # Formatted as a single tuple (id, embedding, metadata) for your FAISS class definition
             faiss_vectors.append((chunk["id"], clean_emb, chunk["metadata"]))
 
         logger.info("Upserting vectors to Pinecone, FAISS, and BM25...")
         
+        # Pinecone
         if hasattr(self.pinecone_store, 'index'):
             batch_size = 100
             for i in range(0, len(pinecone_vectors), batch_size):
@@ -86,10 +81,12 @@ class IngestionPipeline:
         else:
             self.pinecone_store.upsert(pinecone_vectors)
 
-        # Fixes the signature mismatch by passing a single list of tuples
+        # FAISS
         self.faiss_store.add(faiss_vectors)
         
-        self.bm25_store.add_documents(texts, [c["metadata"] for c in chunks])
+        # --- THE FINAL FIX: Calling 'add' instead of 'add_documents' ---
+        # Passing the raw chunks list directly, which perfectly matches List[Dict]!
+        self.bm25_store.add(chunks)
 
         logger.info("Ingestion complete.")
         return {
