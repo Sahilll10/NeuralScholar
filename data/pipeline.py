@@ -61,20 +61,24 @@ class IngestionPipeline:
         embeddings = self.embedder.embed_documents(texts)
 
         pinecone_vectors = []
+        faiss_vectors = []
+        
         for chunk, emb in zip(chunks, embeddings):
-            # Bulletproof the embedding array to prevent Pinecone/NumPy crashes
             clean_emb = emb.tolist() if hasattr(emb, 'tolist') else list(emb)
             clean_emb = [float(x) for x in clean_emb]
             
+            # Formatted for Pinecone
             pinecone_vectors.append({
                 "id": chunk["id"],
                 "values": clean_emb,
                 "metadata": chunk["metadata"]
             })
+            
+            # Formatted as a single tuple (id, embedding, metadata) for your FAISS class definition
+            faiss_vectors.append((chunk["id"], clean_emb, chunk["metadata"]))
 
         logger.info("Upserting vectors to Pinecone, FAISS, and BM25...")
         
-        # The Magic Fix: Bypass the broken wrapper and talk to the index directly in safe batches
         if hasattr(self.pinecone_store, 'index'):
             batch_size = 100
             for i in range(0, len(pinecone_vectors), batch_size):
@@ -82,7 +86,9 @@ class IngestionPipeline:
         else:
             self.pinecone_store.upsert(pinecone_vectors)
 
-        self.faiss_store.add(texts, embeddings, [c["metadata"] for c in chunks])
+        # Fixes the signature mismatch by passing a single list of tuples
+        self.faiss_store.add(faiss_vectors)
+        
         self.bm25_store.add_documents(texts, [c["metadata"] for c in chunks])
 
         logger.info("Ingestion complete.")
