@@ -7,13 +7,12 @@ from typing import List, Dict, Any, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
-
 class FAISSVectorStore:
     """
     Local FAISS-based vector store for development and offline use.
     
     Index type: IndexFlatIP (Inner Product)
-    Since all-mpnet-base-v2 outputs L2-normalized vectors,
+    Since all-MiniLM-L6-v2 outputs L2-normalized vectors,
     inner product = cosine similarity. IndexFlatIP is an exact search
     (no approximation), so results are always optimal. For >1M vectors,
     consider IndexIVFFlat (approximate but much faster).

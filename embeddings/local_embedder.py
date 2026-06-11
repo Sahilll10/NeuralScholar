@@ -6,23 +6,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class LocalEmbedder:
     """
-    Dense embedder using sentence-transformers all-mpnet-base-v2.
+    Dense embedder using sentence-transformers all-MiniLM-L6-v2.
     
     Model details:
-        Architecture: MPNet (Masked and Permuted Pre-training for Language Understanding)
-        Output dimension: 768
-        Max input tokens: 384 (approximately 500-600 characters)
-        Trained on: 1B+ sentence pairs with contrastive loss
-        SBERT benchmark rank: Top-5 on semantic similarity tasks as of 2024
-    
-    Why all-mpnet-base-v2 over alternatives:
-        - vs all-MiniLM-L6-v2: MPNet is slower but 5-8% more accurate on BEIR
-        - vs all-MiniLM-L12-v2: Same accuracy range, MPNet architecture handles
-          long-range dependencies better for technical text
-        - vs E5-large: E5 is larger/more accurate but requires 2x compute
+        Architecture: MiniLM (Lightweight Transformer)
+        Output dimension: 384
+        Max input tokens: 256
+        Trained on: 1B+ sentence pairs
+        Advantage: 5x faster and 4x smaller than MPNet, perfect for Free Tier cloud hosting.
         
     normalize_embeddings=True: L2-normalization makes cosine similarity
     equivalent to dot product, which FAISS IndexFlatIP supports efficiently.
@@ -30,7 +23,7 @@ class LocalEmbedder:
 
     def __init__(
         self,
-        model_name = "all-MiniLM-L6-v2",
+        model_name: str = "all-MiniLM-L6-v2",
         device: Optional[str] = None,
         batch_size: int = 32,
         normalize_embeddings: bool = True
@@ -44,13 +37,13 @@ class LocalEmbedder:
         else:
             self.device = device
 
-        logger.info(f"Loading {model_name} on {self.device}")
-        self.model = SentenceTransformer(model_name, device=self.device)
+        logger.info(f"Loading {self.model_name} on {self.device}")
+        self.model = SentenceTransformer(self.model_name, device=self.device)
         self.dimension = self.model.get_sentence_embedding_dimension()
         logger.info(f"Embedder ready. Dimension: {self.dimension}")
 
     def embed_text(self, text: str) -> np.ndarray:
-        """Embed single text. Returns shape (768,)."""
+        """Embed single text. Returns shape (384,)."""
         return self.embed_batch([text])[0]
 
     def embed_batch(self, texts: List[str]) -> np.ndarray:
@@ -61,7 +54,7 @@ class LocalEmbedder:
             texts: List of raw strings to embed
 
         Returns:
-            numpy array of shape (len(texts), 768), dtype=float32
+            numpy array of shape (len(texts), 384), dtype=float32
             All vectors are L2-normalized when normalize_embeddings=True.
         """
         cleaned = [t.strip() if t and t.strip() else "empty document" for t in texts]

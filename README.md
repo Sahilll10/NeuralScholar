@@ -21,7 +21,11 @@ NeuralScholar is an advanced, end-to-end Retrieval-Augmented Generation (RAG) en
 ### 1. Data Ingestion Pipeline
 1. **Extraction:** Papers are fetched via the ArXiv API matching specific IDs or ML queries.
 2. **Chunking:** Documents are parsed and split using LangChain's `RecursiveCharacterTextSplitter` (Size: 1000, Overlap: 150) to preserve paragraph contexts.
+<<<<<<< HEAD
 3. **Embedding:** Chunks are embedded locally using `all-MiniLM-L6-v2` (384 dimensions) for cloud-optimized memory usage.
+=======
+3. **Embedding:** Chunks are embedded locally using `all-MiniLM-L6-v2` (384 dimensions) for optimal memory usage and speed.
+>>>>>>> bf631df (All updates)
 4. **Indexing:** Vectors are concurrently upserted to a cloud **Pinecone** index, a local **FAISS** index, and a **BM25** sparse index.
 
 ### 2. Query & Retrieval Pipeline
@@ -65,4 +69,8 @@ git clone [https://github.com/Sahilll10/NeuralScholar.git](https://github.com/Sa
 cd NeuralScholar
 python -m venv venv
 source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+<<<<<<< HEAD
 pip install -r requirements-backend.txt
+=======
+pip install -r requirements-backend.txt
+>>>>>>> bf631df (All updates)

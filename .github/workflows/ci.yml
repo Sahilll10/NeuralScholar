@@ -34,9 +34,9 @@ jobs:
           OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
           PINECONE_API_KEY=${{ secrets.PINECONE_API_KEY }}
           PINECONE_INDEX_NAME=neuralscholar-test
-          PINECONE_DIMENSION=768
-          LOCAL_EMBEDDING_MODEL=all-mpnet-base-v2
-          LOCAL_EMBEDDING_DIM=768
+          PINECONE_DIMENSION=384
+          LOCAL_EMBEDDING_MODEL=all-MiniLM-L6-v2
+          LOCAL_EMBEDDING_DIM=384
           REDIS_HOST=localhost
           REDIS_PORT=6379
           OPENAI_CHAT_MODEL=gpt-4o-mini

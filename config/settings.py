@@ -1,7 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional, Literal
 
-
 class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
@@ -13,11 +12,11 @@ class Settings(BaseSettings):
     PINECONE_API_KEY: str
     PINECONE_ENVIRONMENT: str = "gcp-starter"
     PINECONE_INDEX_NAME: str = "neuralscholar"
-    PINECONE_DIMENSION: int = 768  # Must match LOCAL_EMBEDDING_DIM
+    PINECONE_DIMENSION: int = 384  # Updated to match MiniLM
 
     # Local embedding model
-    LOCAL_EMBEDDING_MODEL: str = "all-mpnet-base-v2"
-    LOCAL_EMBEDDING_DIM: int = 768
+    LOCAL_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2" # Lightweight model
+    LOCAL_EMBEDDING_DIM: int = 384 # 384 dimensions
 
     # Text chunking
     CHUNK_SIZE: int = 512
@@ -68,6 +67,5 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-
 
 settings = Settings()
