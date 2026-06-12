@@ -5,7 +5,8 @@ import time
 from typing import List, Dict, Any
 
 # ─── Configuration ──────────────────────────────────────────────────────────────
-API_BASE = "http://localhost:8000/api/v1"
+# Pointing directly to your live Render backend!
+API_BASE = "https://neuralscholar-api.onrender.com/api/v1"
 STREAM_URL = f"{API_BASE}/query/stream"
 QUERY_URL = f"{API_BASE}/query"
 
